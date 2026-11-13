@@ -1,0 +1,11 @@
+.venv/
+.venv-wsl/
+venv/
+__pycache__/
+*.py[cod]
+fw/*.elf
+/workspaces/
+/trace.jsonl
+.env
+.env.*
+!.env.example
