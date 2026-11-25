@@ -20,7 +20,6 @@ class Target:
 
     def start(self):
         self.stop()
-        subprocess.run(["pkill", "-f", "qemu-system-arm"])   # clear stale emulators
         open(self.uart_log, "w").close()
         self.qemu = subprocess.Popen(
             ["qemu-system-arm", "-machine", "netduino2", "-kernel", f"{self.ws}/fw.elf",
@@ -40,11 +39,39 @@ class Target:
         return "".join(m["payload"] for m in r if m["type"] == "console" and isinstance(m["payload"], str))
 
     def run(self, seconds=3):
-        """Run until HardFault_Handler or for `seconds`. Returns status string."""
-        self.cmd("break HardFault_Handler")
-        r = self.gdb.write("continue", timeout_sec=seconds, raise_error_on_timeout=False)
-        faulted = any(m["type"] == "notify" and m["message"] == "stopped" for m in r)
-        return "STOPPED_AT_HARDFAULT" if faulted else "RAN_WITHOUT_FAULT"
+        # Set a temporary breakpoint to avoid accumulating
+        # duplicate breakpoints on repeated executions.
+        self.cmd("tbreak HardFault_Handler")
+
+        # Continue firmware execution.
+        response = self.gdb.write(
+            "continue",
+            timeout_sec=seconds,
+            raise_error_on_timeout=False
+        )
+
+        # Check GDB asynchronous stop events.
+        faulted = any(
+            isinstance(m.get("payload"), dict)
+            and m.get("message") == "stopped"
+            and m["payload"].get("reason") == "breakpoint-hit"
+            for m in response
+        )
+
+        # Fallback: inspect the current program-counter symbol.
+        # This handles cases where the stop event wasn't captured
+        # in the expected MI response format.
+        if not faulted:
+            try:
+                symbol = self.cmd("info symbol $pc")
+                faulted = "HardFault_Handler" in symbol
+            except Exception:
+                faulted = False
+
+        if faulted:
+            return "STOPPED_AT_HARDFAULT"
+
+        return "RAN_WITHOUT_FAULT"
 
     def _word(self, addr):
         try:

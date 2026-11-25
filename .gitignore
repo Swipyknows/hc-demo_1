@@ -1,11 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtual environments
 .venv/
 .venv-wsl/
 venv/
-__pycache__/
-*.py[cod]
-fw/*.elf
-/workspaces/
-/trace.jsonl
+
+# uv
+.uv/
+
+# Environment variables
 .env
 .env.*
 !.env.example
+
+# Generated firmware
+fw/*.elf
+
+# Generated execution workspace
+/workspaces/
+
+# Agent execution traces
+/trace.jsonl
