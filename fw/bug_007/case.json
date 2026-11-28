@@ -1,0 +1,10 @@
+{
+  "id": "bug_007",
+  "category": "Buffer error",
+  "bug_report": "The FIFO self-test prints corrupted data instead of the six characters pushed into it.",
+  "expected_output": [
+    "boot ok",
+    "data: abcdef",
+    "init done"
+  ]
+}

@@ -1,0 +1,268 @@
+{
+  "bug_001": {
+    "root_cause": "rx_callback is never registered, so main() calls through a NULL function pointer; branching to address 0 with bit0=0 raises INVSTATE escalated to HardFault.",
+    "root_cause_keywords": [
+      "rx_callback",
+      "null",
+      "function pointer"
+    ],
+    "expected_fix": "Register the callback (rx_callback = on_rx) before it is called, or guard the call.",
+    "reference_patch": {
+      "file": "main.c",
+      "old": "  rx_callback();",
+      "new": "  rx_callback = on_rx;\n  rx_callback();"
+    },
+    "verify": {
+      "status": "NO_FAULT",
+      "expect_lines": [
+        "boot ok",
+        "rx ok",
+        "init done"
+      ],
+      "forbid": [
+        "HARDFAULT"
+      ]
+    }
+  },
+  "bug_002": {
+    "root_cause": "log_event() takes a word index but main() passes a byte offset (i * sizeof(uint32_t)), so writes land 4x too far, past the end of SRAM, and the log is never filled.",
+    "root_cause_keywords": [
+      "log_event",
+      "offset",
+      "index",
+      "sizeof",
+      "out of bounds"
+    ],
+    "expected_fix": "Pass the entry index i instead of a byte offset.",
+    "reference_patch": {
+      "file": "main.c",
+      "old": "log_event(i * sizeof(uint32_t),",
+      "new": "log_event(i,"
+    },
+    "verify": {
+      "status": "NO_FAULT",
+      "expect_lines": [
+        "boot ok",
+        "log ok",
+        "init done"
+      ],
+      "forbid": [
+        "HARDFAULT",
+        "corrupt"
+      ]
+    }
+  },
+  "bug_003": {
+    "root_cause": "TIM2_CR1 is written with bit 1 (UDIS, update disable) instead of bit 0 (CEN, counter enable), so the timer never counts and UIF never sets.",
+    "root_cause_keywords": [
+      "TIM2_CR1",
+      "CEN",
+      "UDIS",
+      "bit 0"
+    ],
+    "expected_fix": "Set TIM_CR1_CEN in TIM2_CR1.",
+    "reference_patch": {
+      "file": "main.c",
+      "old": "TIM2_CR1 = (1u << 1);",
+      "new": "TIM2_CR1 = TIM_CR1_CEN;"
+    },
+    "verify": {
+      "status": "NO_FAULT",
+      "expect_lines": [
+        "boot ok",
+        "tick ok",
+        "init done"
+      ],
+      "forbid": [
+        "HARDFAULT",
+        "timeout"
+      ]
+    }
+  },
+  "bug_004": {
+    "root_cause": "The console is initialised on USART2, but only USART1 is connected to the serial port, so all output is lost.",
+    "root_cause_keywords": [
+      "USART2",
+      "USART1",
+      "console_init"
+    ],
+    "expected_fix": "Initialise the console on USART1_BASE.",
+    "reference_patch": {
+      "file": "main.c",
+      "old": "console_init(USART2_BASE);",
+      "new": "console_init(USART1_BASE);"
+    },
+    "verify": {
+      "status": "NO_FAULT",
+      "expect_lines": [
+        "boot ok",
+        "console ready",
+        "init done"
+      ],
+      "forbid": [
+        "HARDFAULT"
+      ]
+    }
+  },
+  "bug_005": {
+    "root_cause": "The SysTick ISR is named Systick_Handler (lower-case t) so it does not override the weak SysTick_Handler; SysTick falls into Default_Handler and spins forever.",
+    "root_cause_keywords": [
+      "Systick_Handler",
+      "SysTick_Handler",
+      "weak",
+      "vector"
+    ],
+    "expected_fix": "Rename the ISR to SysTick_Handler.",
+    "reference_patch": {
+      "file": "main.c",
+      "old": "void Systick_Handler(void)",
+      "new": "void SysTick_Handler(void)"
+    },
+    "verify": {
+      "status": "NO_FAULT",
+      "expect_lines": [
+        "boot ok",
+        "tick ok",
+        "init done"
+      ],
+      "forbid": [
+        "HARDFAULT"
+      ]
+    }
+  },
+  "bug_006": {
+    "root_cause": "pin_clear() ANDs with the bit mask instead of its complement, clearing every other bit and keeping the target bit.",
+    "root_cause_keywords": [
+      "pin_clear",
+      "~",
+      "mask",
+      "complement"
+    ],
+    "expected_fix": "Use port_out &= ~(1u << pin).",
+    "reference_patch": {
+      "file": "main.c",
+      "old": "port_out &= (1u << pin);",
+      "new": "port_out &= ~(1u << pin);"
+    },
+    "verify": {
+      "status": "NO_FAULT",
+      "expect_lines": [
+        "boot ok",
+        "led=0 buzzer=1",
+        "init done"
+      ],
+      "forbid": [
+        "HARDFAULT"
+      ]
+    }
+  },
+  "bug_007": {
+    "root_cause": "fifo_pop() wraps tail with '> FIFO_SIZE' instead of '>= FIFO_SIZE', so it reads data[4], one past the end of the buffer.",
+    "root_cause_keywords": [
+      "fifo_pop",
+      "tail",
+      "FIFO_SIZE",
+      "off-by-one",
+      ">="
+    ],
+    "expected_fix": "Wrap tail when it reaches FIFO_SIZE (>=).",
+    "reference_patch": {
+      "file": "main.c",
+      "old": "if (++fifo.tail > FIFO_SIZE)",
+      "new": "if (++fifo.tail >= FIFO_SIZE)"
+    },
+    "verify": {
+      "status": "NO_FAULT",
+      "expect_lines": [
+        "boot ok",
+        "data: abcdef",
+        "init done"
+      ],
+      "forbid": [
+        "HARDFAULT",
+        "?"
+      ]
+    }
+  },
+  "bug_008": {
+    "root_cause": "report_average() runs before sensors_init(), so sample_count is still 0; with DIV_0_TRP enabled the division raises a UsageFault (DIVBYZERO) escalated to HardFault.",
+    "root_cause_keywords": [
+      "sensors_init",
+      "report_average",
+      "sample_count",
+      "divide",
+      "order"
+    ],
+    "expected_fix": "Call sensors_init() before report_average().",
+    "reference_patch": {
+      "file": "main.c",
+      "old": "  report_average();\n  sensors_init();",
+      "new": "  sensors_init();\n  report_average();"
+    },
+    "verify": {
+      "status": "NO_FAULT",
+      "expect_lines": [
+        "boot ok",
+        "avg 25",
+        "init done"
+      ],
+      "forbid": [
+        "HARDFAULT"
+      ]
+    }
+  },
+  "bug_009": {
+    "root_cause": "flush_queue() decrements an unsigned counter by 2 from an odd value and tests '!= 0', so it skips zero, wraps around and loops (practically) forever.",
+    "root_cause_keywords": [
+      "pending",
+      "unsigned",
+      "!= 0",
+      "wrap",
+      "odd"
+    ],
+    "expected_fix": "Stop when pending is below 2 (e.g. while (pending > 0) with saturating subtraction).",
+    "reference_patch": {
+      "file": "main.c",
+      "old": "    pending -= 2;",
+      "new": "    pending = pending > 2 ? pending - 2 : 0;"
+    },
+    "verify": {
+      "status": "NO_FAULT",
+      "expect_lines": [
+        "boot ok",
+        "batches 3",
+        "init done"
+      ],
+      "forbid": [
+        "HARDFAULT"
+      ]
+    }
+  },
+  "bug_010": {
+    "root_cause": "TIMEOUT_TICKS divides the millisecond timeout by 10 (assumes a 10 ms tick) but SysTick runs at 1 ms, so the timeout is 5 ticks instead of 50, shorter than the 20 ms warm-up.",
+    "root_cause_keywords": [
+      "TIMEOUT_TICKS",
+      "TICK_HZ",
+      "units",
+      "/ 10"
+    ],
+    "expected_fix": "Convert milliseconds with TICK_HZ: (SENSOR_TIMEOUT_MS * TICK_HZ / 1000).",
+    "reference_patch": {
+      "file": "main.c",
+      "old": "(SENSOR_TIMEOUT_MS / 10)",
+      "new": "(SENSOR_TIMEOUT_MS * TICK_HZ / 1000)"
+    },
+    "verify": {
+      "status": "NO_FAULT",
+      "expect_lines": [
+        "boot ok",
+        "sensor ready",
+        "init done"
+      ],
+      "forbid": [
+        "HARDFAULT",
+        "timeout"
+      ]
+    }
+  }
+}

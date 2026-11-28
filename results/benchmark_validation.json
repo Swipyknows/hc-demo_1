@@ -1,0 +1,19 @@
+[
+  {
+    "case": "bug_003",
+    "valid": true,
+    "seconds": 13.7,
+    "buggy": {
+      "verdict": "FAIL",
+      "status": "NO_FAULT",
+      "uart": "boot ok\ntick timeout\ninit done\n",
+      "reason": "missing or out of order: 'tick ok'"
+    },
+    "fixed": {
+      "verdict": "PASS",
+      "status": "NO_FAULT",
+      "uart": "boot ok\ntick ok\ninit done\n",
+      "reason": "expected behaviour observed"
+    }
+  }
+]

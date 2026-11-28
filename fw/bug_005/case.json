@@ -1,0 +1,10 @@
+{
+  "id": "bug_005",
+  "category": "Interrupt error",
+  "bug_report": "The firmware prints 'boot ok' and then freezes as soon as the system tick is started.",
+  "expected_output": [
+    "boot ok",
+    "tick ok",
+    "init done"
+  ]
+}

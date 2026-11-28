@@ -1,0 +1,10 @@
+{
+  "id": "bug_002",
+  "category": "Memory error",
+  "bug_report": "The event-log self-test always reports 'log corrupt' after boot.",
+  "expected_output": [
+    "boot ok",
+    "log ok",
+    "init done"
+  ]
+}

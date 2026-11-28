@@ -1,0 +1,10 @@
+{
+  "id": "bug_010",
+  "category": "Timing error",
+  "bug_report": "The sensor always reports a timeout, although it is ready 20 ms after power-up and the timeout is 50 ms.",
+  "expected_output": [
+    "boot ok",
+    "sensor ready",
+    "init done"
+  ]
+}

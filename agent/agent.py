@@ -9,7 +9,10 @@ SYSTEM = (
     "test it, then fix and verify. Rules: only patch main.c; make the smallest fix that "
     "restores the behaviour described in the bug report; always call rebuild_and_run after a "
     "patch and check the UART output and status; call submit_fix only when your own "
-    "verification shows the fault is gone and the expected behaviour appears."
+    "verification shows the fault is gone and the expected behaviour appears. "
+    "Run status is HARDFAULT, UNHANDLED_EXCEPTION (an exception had no handler), or NO_FAULT "
+    "(still running at the end of the time window; it may still be hung or print wrong data). "
+    "startup.c, board.h and link.ld are read-only but may be read."
 )
 
 
@@ -33,8 +36,8 @@ TOOLS = [
           {"command": _s("GDB command")}, ["command"]),
     _tool("fault_registers", "Decode the Cortex-M fault status registers (CFSR/HFSR).", {}),
     _tool("read_uart", "Return everything the firmware has printed on its serial port.", {}),
-    _tool("read_source", "Read lines of a source file, with line numbers.",
-          {"path": _s("file name, e.g. main.c"), "start": {"type": "integer"}, "end": {"type": "integer"}},
+    _tool("read_source", "Read lines of a source file (main.c, startup.c, board.h, link.ld), "
+          "with line numbers.", {"path": _s("file name, e.g. main.c"), "start": {"type": "integer"}, "end": {"type": "integer"}},
           ["path"]),
     _tool("apply_patch", "Replace exactly one occurrence of old_text with new_text in main.c.",
           {"path": _s("main.c"), "old_text": _s("exact text to replace"), "new_text": _s("replacement")},
@@ -48,13 +51,16 @@ TOOLS = [
 
 def dispatch(t, name, a, approve):
     if name == "gdb":
-        return t.cmd(a["command"]) or "(no output)"
+        return t.gdb_command(a["command"])
     if name == "fault_registers":
         return json.dumps(t.fault_registers())
     if name == "read_uart":
         return t.read_uart() or "(empty)"
     if name == "read_source":
-        return t.read_source(a["path"], a.get("start", 1), a.get("end", 200))
+        try:
+            return t.read_source(a["path"], a.get("start", 1), a.get("end", 200))
+        except ValueError as e:
+            return f"ERROR: {e}"
     if name == "apply_patch":
         try:
             diff, new_text = t.make_patch(a["path"], a["old_text"], a["new_text"])
@@ -62,7 +68,7 @@ def dispatch(t, name, a, approve):
             return f"PATCH REJECTED: {e}"
         if not approve(diff):                       # human-in-the-loop gate
             return "PATCH DENIED by human reviewer"
-        t.apply_patch(a["path"], new_text)
+        t.apply_patch(a["path"], new_text, diff)
         return "PATCH APPLIED:\n" + diff
     if name == "rebuild_and_run":
         return json.dumps(t.rebuild_and_run())
