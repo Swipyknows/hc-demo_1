@@ -27,3 +27,4 @@ fw/*.elf
 
 # Vendor PDFs for RAG (copyrighted, do not commit)
 knowledge_base/documentation/*.pdf
+/knowledge_base/chroma/

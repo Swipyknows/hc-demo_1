@@ -1,4 +1,4 @@
-"""Usage:  python3 run_demo.py [bug_XXX] [--auto]
+"""Usage:  python3 run_demo.py [bug_XXX] [--auto] [--no-rag]
 
 MODEL and GEMINI_API_KEY are read from the environment or from .env (see .env.example).
 """
@@ -17,12 +17,13 @@ from agent.agent import run_agent
 from agent.llm import litellm_chat
 from evaluator.benchmark import load_case
 from evaluator.hidden_check import evaluate, report
+from rag.retriever import load_retriever
 from tools.target import Target
 
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 case = load_case(args[0] if args else "bug_005")
-BUG = (f"{case['bug_report']} Expected serial output: "
-       + ", ".join(repr(l) for l in case["expected_output"]) + ".")
+BUG = case["bug_report"]
+EXPECTED = case["expected_output"]
 
 
 def approve(diff):
@@ -44,22 +45,27 @@ def save_run(record):
     print(f"\nRun saved to {path}")
 
 
+retriever = None if "--no-rag" in sys.argv else load_retriever()
 record = {"case": case["id"], "model": os.environ.get("MODEL"), "bug_report": BUG,
+          "expected_output": EXPECTED, "rag": retriever is not None,
           "started": time.strftime("%Y-%m-%d %H:%M:%S")}
 t0 = time.time()
 t = Target(f"fw/{case['id']}")
 try:
-    res = run_agent(t, litellm_chat, BUG, approve=approve)
+    res = run_agent(t, litellm_chat, BUG, EXPECTED, approve=approve, retriever=retriever)
 except Exception as e:                # record failed runs too (e.g. API errors)
     record.update(error=f"{type(e).__name__}: {e}", seconds=round(time.time() - t0, 1))
     save_run(record)
     raise
 finally:
     t.stop()          # always clean up, even if the LLM call crashes
-print(res)
+print("\n===== AGENT =====")
+print(f"outcome={res['outcome']} steps={res['steps']} "
+      f"fix_attempts={res['fix_attempts']} time={res['seconds']}s")
+print("root cause:", res["root_cause"] or "(none stated)")
 print("\n===== HIDDEN EVALUATOR =====")
 ev = evaluate(t.ws, case["id"])
 print(report(ev))
-record.update(agent=res, patch=t.total_diff(), seconds=round(time.time() - t0, 1),
+record.update(agent=res, seconds=round(time.time() - t0, 1),
               evaluation={k: ev[k] for k in ("verdict", "build", "status", "uart", "reason")})
 save_run(record)
