@@ -1,12 +1,12 @@
 [project]
-name = "hc-demo-1"
+name = "embedded-debugging-copilot"
 version = "0.1.0"
-description = "Embedded debugging copilot"
+description = "Agentic AI-based hardware-aware Embedded C debugging copilot"
 requires-python = ">=3.10"
 dependencies = [
     "pygdbmi",
     "litellm",
-    "tenacity>=9.2.1",
+    "tenacity>=9.2.1",            # required by litellm for num_retries
 ]
 
 [dependency-groups]

@@ -1,0 +1,5 @@
+# Mirrors pyproject.toml for users not using uv:  pip install -r requirements.txt
+pygdbmi
+litellm
+tenacity>=9.2.1
+pytest
