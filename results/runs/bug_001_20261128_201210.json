@@ -1,0 +1,115 @@
+{
+  "case": "bug_001",
+  "model": "gemini/gemini-3.1-flash-lite",
+  "bug_report": "After printing 'boot ok' the board stops responding on serial.",
+  "expected_output": [
+    "boot ok",
+    "rx ok",
+    "init done"
+  ],
+  "rag": false,
+  "started": "2026-11-28 20:10:43",
+  "agent": {
+    "outcome": "FIXED",
+    "steps": 4,
+    "fix_attempts": 1,
+    "root_cause": "The rx_callback function pointer was not initialized before being called, causing a jump to address 0x0 and a hard fault.",
+    "patch": "--- a/main.c\n+++ b/main.c\n@@ -11,6 +11,7 @@\n {\n   USART_CR1(USART1_BASE) = USART_CR1_UE | USART_CR1_TE;\n   uart_puts(\"boot ok\\n\");\n+  rx_callback = on_rx;\n   rx_callback();\n   uart_puts(\"init done\\n\");\n   for (;;);\n",
+    "rag_queries": [],
+    "initial_evidence": {
+      "build": "OK",
+      "warnings": [
+        "main.c:8:13: warning: 'on_rx' defined but not used [-Wunused-function]"
+      ],
+      "status": "HARDFAULT",
+      "uart": "boot ok\n",
+      "uart_check": {
+        "ok": false,
+        "matched": [
+          "boot ok"
+        ],
+        "missing": [
+          "rx ok",
+          "init done"
+        ],
+        "first_missing": "rx ok",
+        "unexpected": [],
+        "last_line": "boot ok"
+      },
+      "backtrace": "#0  HardFault_Handler () at startup.c:21\n#1  <signal handler called>\n#2  0x00000000 in ?? ()",
+      "fault": {
+        "CFSR": "0x20000",
+        "HFSR": "0x40000000",
+        "active_flags": [
+          "INVSTATE",
+          "FORCED"
+        ],
+        "exception": "HardFault",
+        "faulting_pc": "0x0",
+        "faulting_location": "no symbol",
+        "caller_lr": "0x80001b9",
+        "caller_location": "main + 24 in section .text main.c:15"
+      }
+    },
+    "seconds": 81.6
+  },
+  "seconds": 87.3,
+  "evaluation": {
+    "verdict": "PASS",
+    "build": "SUCCESS",
+    "status": "NO_FAULT",
+    "uart": "boot ok\nrx ok\ninit done\n",
+    "reason": "expected behaviour observed"
+  },
+  "trace": [
+    {
+      "step": 0,
+      "thought": "initial observation",
+      "tool": "analyze",
+      "args": {},
+      "result": "BUILD: OK\nCOMPILER WARNINGS:\n  main.c:8:13: warning: 'on_rx' defined but not used [-Wunused-function]\nRUN STATUS: HARDFAULT\nUART OUTPUT: 'boot ok\\n'\nEXPECTED LINES: ['boot ok', 'rx ok', 'init done']\nUART CHECK: missing ['rx ok', 'init done'] (output stops after 'boot ok')\nFAULT: CFSR=0x20000, HFSR=0x40000000, active_flags=['INVSTATE', 'FORCED'], exception=HardFault, faulting_pc=0x0, faulting_location=no symbol, caller_lr=0x80001b9, caller_location=main + 24 in section .text main.c:15\nBACKTRACE:\n#0  HardFault_Handler () at startup.c:21\n#1  <signal handler called>\n#2  0x00000000 in ?? ()\nSOURCE AROUND main.c:15:\n  11: {\n  12:   USART_CR1(USART1_BASE) = USART_CR1_UE | USART_CR1_TE;\n  13:   uart_puts(\"boot ok\\n\");\n  14:   rx_callback();\n> 15:   uart_puts(\"init done\\n\");\n  16:   for (;;);\n  17: }",
+      "t": 5.56
+    },
+    {
+      "step": 1,
+      "thought": "",
+      "tool": "read_source",
+      "args": {
+        "path": "main.c"
+      },
+      "result": "1: #include \"board.h\"\n2: \n3: static void uart_putc(char c) { USART_DR(USART1_BASE) = c; }\n4: static void uart_puts(const char *s) { while (*s) uart_putc(*s++); }\n5: \n6: /* Receive-path callback, registered by the driver setup code */\n7: void (*rx_callback)(void);\n8: static void on_rx(void) { uart_puts(\"rx ok\\n\"); }\n9: \n10: int main(void)\n11: {\n12:   USART_CR1(USART1_BASE) = USART_CR1_UE | USART_CR1_TE;\n13:   uart_puts(\"boot ok\\n\");\n14:   rx_callback();\n15:   uart_puts(\"init done\\n\");\n16:   for (;;);\n17: }",
+      "t": 60.51
+    },
+    {
+      "step": 2,
+      "thought": "",
+      "tool": "gdb_command",
+      "args": {
+        "command": "p rx_callback"
+      },
+      "result": "$1 = (void (*)(void)) 0x0\n",
+      "t": 64.73
+    },
+    {
+      "step": 3,
+      "thought": "",
+      "tool": "apply_patch",
+      "args": {
+        "root_cause": "The rx_callback function pointer was not initialized before being called, causing a jump to address 0x0 and a hard fault.",
+        "path": "main.c",
+        "old_text": "  rx_callback();",
+        "new_text": "  rx_callback = on_rx;\n  rx_callback();"
+      },
+      "result": "PATCH APPLIED:\n--- a/main.c\n+++ b/main.c\n@@ -11,6 +11,7 @@\n {\n   USART_CR1(USART1_BASE) = USART_CR1_UE | USART_CR1_TE;\n   uart_puts(\"boot ok\\n\");\n+  rx_callback = on_rx;\n   rx_callback();\n   uart_puts(\"init done\\n\");\n   for (;;);\n\nNow call verify_fix.",
+      "t": 70.59
+    },
+    {
+      "step": 4,
+      "thought": "",
+      "tool": "verify_fix",
+      "args": {},
+      "result": "VERIFY: PASS\nBUILD: OK\nRUN STATUS: NO_FAULT\nUART OUTPUT: 'boot ok\\nrx ok\\ninit done\\n'\nEXPECTED LINES: ['boot ok', 'rx ok', 'init done']\nUART CHECK: all expected lines present\nCPU HALTED AT (end of run window): main + 36 in section .text main.c:17\nBACKTRACE:\n#0  main () at main.c:17\nSOURCE AROUND main.c:17:\n  13:   uart_puts(\"boot ok\\n\");\n  14:   rx_callback = on_rx;\n  15:   rx_callback();\n  16:   uart_puts(\"init done\\n\");\n> 17:   for (;;);\n  18: }",
+      "t": 81.57
+    }
+  ]
+}

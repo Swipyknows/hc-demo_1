@@ -1,0 +1,93 @@
+{
+  "case": "bug_010",
+  "model": "gemini/gemini-3.1-flash-lite",
+  "bug_report": "The sensor always reports a timeout, although it is ready 20 ms after power-up and the timeout is 50 ms.",
+  "expected_output": [
+    "boot ok",
+    "sensor ready",
+    "init done"
+  ],
+  "rag": false,
+  "started": "2026-11-28 20:20:08",
+  "agent": {
+    "outcome": "FIXED",
+    "steps": 3,
+    "fix_attempts": 1,
+    "root_cause": "TIMEOUT_TICKS was calculated as 5 instead of 50, causing the timeout check to fail before the 20ms sensor warmup period completed.",
+    "patch": "--- a/main.c\n+++ b/main.c\n@@ -6,7 +6,7 @@\n #define TICK_HZ           1000          /* SysTick fires every 1 ms */\n #define SENSOR_WARMUP_MS  20            /* sensor needs 20 ms after power-up */\n #define SENSOR_TIMEOUT_MS 50            /* give up after 50 ms */\n-#define TIMEOUT_TICKS     (SENSOR_TIMEOUT_MS / 10)\n+#define TIMEOUT_TICKS     SENSOR_TIMEOUT_MS\n \n static volatile uint32_t ticks;\n static volatile uint32_t sensor_ready;\n",
+    "rag_queries": [],
+    "initial_evidence": {
+      "build": "OK",
+      "warnings": [],
+      "status": "NO_FAULT",
+      "uart": "boot ok\nsensor timeout\ninit done\n",
+      "uart_check": {
+        "ok": false,
+        "matched": [
+          "boot ok"
+        ],
+        "missing": [
+          "sensor ready",
+          "init done"
+        ],
+        "first_missing": "sensor ready",
+        "unexpected": [
+          "sensor timeout"
+        ],
+        "last_line": "init done"
+      },
+      "backtrace": "#0  main () at main.c:42",
+      "halted_at": "main + 50 in section .text main.c:42"
+    },
+    "seconds": 51.4
+  },
+  "seconds": 57.0,
+  "evaluation": {
+    "verdict": "PASS",
+    "build": "SUCCESS",
+    "status": "NO_FAULT",
+    "uart": "boot ok\nsensor ready\ninit done\n",
+    "reason": "expected behaviour observed"
+  },
+  "trace": [
+    {
+      "step": 0,
+      "thought": "initial observation",
+      "tool": "analyze",
+      "args": {},
+      "result": "BUILD: OK\nRUN STATUS: NO_FAULT\nUART OUTPUT: 'boot ok\\nsensor timeout\\ninit done\\n'\nEXPECTED LINES: ['boot ok', 'sensor ready', 'init done']\nUART CHECK: missing ['sensor ready', 'init done'] (output stops after 'init done')\nUNEXPECTED UART LINES: ['sensor timeout']\nCPU HALTED AT (end of run window): main + 50 in section .text main.c:42\nBACKTRACE:\n#0  main () at main.c:42\nSOURCE AROUND main.c:42:\n  38:   uart_puts(\"boot ok\\n\");\n  39:   systick_init();\n  40:   uart_puts(wait_sensor() ? \"sensor ready\\n\" : \"sensor timeout\\n\");\n  41:   uart_puts(\"init done\\n\");\n> 42:   for (;;);\n  43: }",
+      "t": 6.22
+    },
+    {
+      "step": 1,
+      "thought": "",
+      "tool": "read_source",
+      "args": {
+        "path": "main.c"
+      },
+      "result": "1: #include \"board.h\"\n2: \n3: static void uart_putc(char c) { USART_DR(USART1_BASE) = c; }\n4: static void uart_puts(const char *s) { while (*s) uart_putc(*s++); }\n5: \n6: #define TICK_HZ           1000          /* SysTick fires every 1 ms */\n7: #define SENSOR_WARMUP_MS  20            /* sensor needs 20 ms after power-up */\n8: #define SENSOR_TIMEOUT_MS 50            /* give up after 50 ms */\n9: #define TIMEOUT_TICKS     (SENSOR_TIMEOUT_MS / 10)\n10: \n11: static volatile uint32_t ticks;\n12: static volatile uint32_t sensor_ready;\n13: \n14: void SysTick_Handler(void)\n15: {\n16:   ticks++;\n17:   if (ticks >= SENSOR_WARMUP_MS) sensor_ready = 1;\n18: }\n19: \n20: static void systick_init(void)\n21: {\n22:   SYST_RVR = 1000 - 1;\n23:   SYST_CVR = 0;\n24:   SYST_CSR = SYST_CSR_ENABLE | SYST_CSR_TICKINT | SYST_CSR_CLKSOURCE;\n25: }\n26: \n27: static int wait_sensor(void)\n28: {\n29:   uint32_t start = ticks;\n30:   while (!sensor_ready)\n31:     if (ticks - start > TIMEOUT_TICKS) return 0;\n32:   return 1;\n33: }\n34: \n35: int main(void)\n36: {\n37:   USART_CR1(USART1_BASE) = USART_CR1_UE | USART_CR1_TE;\n38:   uart_puts(\"boot ok\\n\");\n39:   systick_init();\n40:   uart_puts(wait_sensor() ? \"sensor ready\\n\" : \"sensor timeout\\n\");\n41:   uart_puts(\"init done\\n\");\n42:   for (;;);\n43: }",
+      "t": 41.1
+    },
+    {
+      "step": 2,
+      "thought": "The root cause of the sensor timeout is an incorrect calculation of `TIMEOUT_TICKS`.\n\nIn `main.c`:\n- `SENSOR_TIMEOUT_MS` is defined as 50.\n- `TIMEOUT_TICKS` is defined as `SENSOR_TIMEOUT_MS / 10`, which results in `50 / 10 = 5`.\n- `SysTick_Handler` fires every 1 ms (as implied by `SYST_RVR` and the `TICK_HZ` comment).\n- `wait_sensor()` compares the elapsed ticks against `TIMEOUT_TICKS` (5). Since the sensor takes 20 ms to be ready, and the loop checks for a timeout after only 5 ticks (5 ms), the `wait_sensor` function correctly (by its definition) returns 0 (timeout).\n\nTo fix this, `TIMEOUT_TICKS` should be defined as `SENSOR_TIMEOUT_MS` (since ticks represent ms), or the divisor should be removed.\n\n```c\n#define TIMEOUT_TICKS     SENSOR_TIMEOUT_MS\n```\n\n",
+      "tool": "apply_patch",
+      "args": {
+        "new_text": "#define TIMEOUT_TICKS     SENSOR_TIMEOUT_MS",
+        "old_text": "#define TIMEOUT_TICKS     (SENSOR_TIMEOUT_MS / 10)",
+        "root_cause": "TIMEOUT_TICKS was calculated as 5 instead of 50, causing the timeout check to fail before the 20ms sensor warmup period completed.",
+        "path": "main.c"
+      },
+      "result": "PATCH APPLIED:\n--- a/main.c\n+++ b/main.c\n@@ -6,7 +6,7 @@\n #define TICK_HZ           1000          /* SysTick fires every 1 ms */\n #define SENSOR_WARMUP_MS  20            /* sensor needs 20 ms after power-up */\n #define SENSOR_TIMEOUT_MS 50            /* give up after 50 ms */\n-#define TIMEOUT_TICKS     (SENSOR_TIMEOUT_MS / 10)\n+#define TIMEOUT_TICKS     SENSOR_TIMEOUT_MS\n \n static volatile uint32_t ticks;\n static volatile uint32_t sensor_ready;\n\nNow call verify_fix.",
+      "t": 44.46
+    },
+    {
+      "step": 3,
+      "thought": "",
+      "tool": "verify_fix",
+      "args": {},
+      "result": "VERIFY: PASS\nBUILD: OK\nRUN STATUS: NO_FAULT\nUART OUTPUT: 'boot ok\\nsensor ready\\ninit done\\n'\nEXPECTED LINES: ['boot ok', 'sensor ready', 'init done']\nUART CHECK: all expected lines present\nCPU HALTED AT (end of run window): main + 50 in section .text main.c:42\nBACKTRACE:\n#0  main () at main.c:42\nSOURCE AROUND main.c:42:\n  38:   uart_puts(\"boot ok\\n\");\n  39:   systick_init();\n  40:   uart_puts(wait_sensor() ? \"sensor ready\\n\" : \"sensor timeout\\n\");\n  41:   uart_puts(\"init done\\n\");\n> 42:   for (;;);\n  43: }",
+      "t": 51.35
+    }
+  ]
+}

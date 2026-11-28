@@ -7,6 +7,10 @@ dependencies = [
     "pygdbmi",
     "litellm",
     "tenacity>=9.2.1",            # required by litellm for num_retries
+    "pymupdf",
+    "chromadb",
+    "sentence-transformers",
+    "torch",
 ]
 
 [dependency-groups]
@@ -18,3 +22,12 @@ pythonpath = ["."]
 
 [tool.uv]
 package = false
+
+# CPU-only PyTorch (for Sentence Transformers): avoids the multi-GB CUDA build
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

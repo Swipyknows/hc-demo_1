@@ -1,0 +1,161 @@
+{
+  "case": "bug_003",
+  "model": "gemini/gemini-3.1-flash-lite",
+  "bug_report": "The heartbeat timer never fires: the firmware always prints 'tick timeout'.",
+  "expected_output": [
+    "boot ok",
+    "tick ok",
+    "init done"
+  ],
+  "rag": false,
+  "started": "2026-11-28 20:14:56",
+  "agent": {
+    "outcome": "FIXED",
+    "steps": 10,
+    "fix_attempts": 1,
+    "root_cause": "The timer was not actually enabled because the code set the URS (Update Request Source) bit instead of the CEN (Counter Enable) bit in TIM2_CR1. Bit 0 is CEN, bit 1 is URS. Setting bit 0 starts the timer.",
+    "patch": "--- a/main.c\n+++ b/main.c\n@@ -12,7 +12,7 @@\n   TIM2_CNT = 0;\n   TIM2_SR = 0;\n   TIM2_DIER = TIM_DIER_UIE;          /* update event flag/interrupt (IRQ stays masked in NVIC) */\n-  TIM2_CR1 = (1u << 1);\n+  TIM2_CR1 = 1;\n }\n \n static int wait_heartbeat(void)\n",
+    "rag_queries": [],
+    "initial_evidence": {
+      "build": "OK",
+      "warnings": [],
+      "status": "NO_FAULT",
+      "uart": "boot ok\ntick timeout\ninit done\n",
+      "uart_check": {
+        "ok": false,
+        "matched": [
+          "boot ok"
+        ],
+        "missing": [
+          "tick ok",
+          "init done"
+        ],
+        "first_missing": "tick ok",
+        "unexpected": [
+          "tick timeout"
+        ],
+        "last_line": "init done"
+      },
+      "backtrace": "#0  main () at main.c:34",
+      "halted_at": "main + 50 in section .text main.c:34"
+    },
+    "seconds": 92.9
+  },
+  "seconds": 98.5,
+  "evaluation": {
+    "verdict": "PASS",
+    "build": "SUCCESS",
+    "status": "NO_FAULT",
+    "uart": "boot ok\ntick ok\ninit done\n",
+    "reason": "expected behaviour observed"
+  },
+  "trace": [
+    {
+      "step": 0,
+      "thought": "initial observation",
+      "tool": "analyze",
+      "args": {},
+      "result": "BUILD: OK\nRUN STATUS: NO_FAULT\nUART OUTPUT: 'boot ok\\ntick timeout\\ninit done\\n'\nEXPECTED LINES: ['boot ok', 'tick ok', 'init done']\nUART CHECK: missing ['tick ok', 'init done'] (output stops after 'init done')\nUNEXPECTED UART LINES: ['tick timeout']\nCPU HALTED AT (end of run window): main + 50 in section .text main.c:34\nBACKTRACE:\n#0  main () at main.c:34\nSOURCE AROUND main.c:34:\n  30:   uart_puts(\"boot ok\\n\");\n  31:   heartbeat_timer_init();\n  32:   uart_puts(wait_heartbeat() ? \"tick ok\\n\" : \"tick timeout\\n\");\n  33:   uart_puts(\"init done\\n\");\n> 34:   for (;;);\n  35: }",
+      "t": 5.68
+    },
+    {
+      "step": 1,
+      "thought": "",
+      "tool": "run_firmware",
+      "args": {},
+      "result": "BUILD: OK\nRUN STATUS: NO_FAULT\nUART OUTPUT: 'boot ok\\ntick timeout\\ninit done\\n'\nEXPECTED LINES: ['boot ok', 'tick ok', 'init done']\nUART CHECK: missing ['tick ok', 'init done'] (output stops after 'init done')\nUNEXPECTED UART LINES: ['tick timeout']\nCPU HALTED AT (end of run window): main + 52 in section .text main.c:34\nBACKTRACE:\n#0  0x08000258 in main () at main.c:34\nSOURCE AROUND main.c:34:\n  30:   uart_puts(\"boot ok\\n\");\n  31:   heartbeat_timer_init();\n  32:   uart_puts(wait_heartbeat() ? \"tick ok\\n\" : \"tick timeout\\n\");\n  33:   uart_puts(\"init done\\n\");\n> 34:   for (;;);\n  35: }",
+      "t": 49.93
+    },
+    {
+      "step": 2,
+      "thought": "",
+      "tool": "read_source",
+      "args": {
+        "path": "main.c"
+      },
+      "result": "1: #include \"board.h\"\n2: \n3: static void uart_putc(char c) { USART_DR(USART1_BASE) = c; }\n4: static void uart_puts(const char *s) { while (*s) uart_putc(*s++); }\n5: \n6: /* TIM2 provides the periodic heartbeat for the control loop */\n7: static void heartbeat_timer_init(void)\n8: {\n9:   TIM2_CR1 = 0;\n10:   TIM2_PSC = 0;\n11:   TIM2_ARR = 1000;\n12:   TIM2_CNT = 0;\n13:   TIM2_SR = 0;\n14:   TIM2_DIER = TIM_DIER_UIE;          /* update event flag/interrupt (IRQ stays masked in NVIC) */\n15:   TIM2_CR1 = (1u << 1);\n16: }\n17: \n18: static int wait_heartbeat(void)\n19: {\n20:   uint32_t spins = 2000000;\n21:   while (!(TIM2_SR & TIM_SR_UIF))\n22:     if (--spins == 0) return 0;\n23:   TIM2_SR = 0;\n24:   return 1;\n25: }\n26: \n27: int main(void)\n28: {\n29:   USART_CR1(USART1_BASE) = USART_CR1_UE | USART_CR1_TE;\n30:   uart_puts(\"boot ok\\n\");\n31:   heartbeat_timer_init();\n32:   uart_puts(wait_heartbeat() ? \"tick ok\\n\" : \"tick timeout\\n\");\n33:   uart_puts(\"init done\\n\");\n34:   for (;;);\n35: }",
+      "t": 53.84
+    },
+    {
+      "step": 3,
+      "thought": "",
+      "tool": "retrieve_docs",
+      "args": {
+        "query": "STM32 TIM2 CR1 UDIS URS UCPRE ARPE CEN"
+      },
+      "result": "Documentation retrieval is not available in this configuration.",
+      "t": 59.73
+    },
+    {
+      "step": 4,
+      "thought": "",
+      "tool": "gdb_command",
+      "args": {
+        "command": "x/1wx 0x40000000"
+      },
+      "result": "0x40000000:\t0x00000002\n",
+      "t": 62.9
+    },
+    {
+      "step": 5,
+      "thought": "",
+      "tool": "gdb_command",
+      "args": {
+        "command": "x/1wx 0x40000004"
+      },
+      "result": "0x40000004:\t0x00000000\n",
+      "t": 64.97
+    },
+    {
+      "step": 6,
+      "thought": "",
+      "tool": "gdb_command",
+      "args": {
+        "command": "x/1wx 0x40000008"
+      },
+      "result": "0x40000008:\t0x00000000\n",
+      "t": 66.55
+    },
+    {
+      "step": 7,
+      "thought": "",
+      "tool": "gdb_command",
+      "args": {
+        "command": "x/1wx 0x4000000C"
+      },
+      "result": "0x4000000c:\t0x00000001\n",
+      "t": 75.55
+    },
+    {
+      "step": 8,
+      "thought": "",
+      "tool": "gdb_command",
+      "args": {
+        "command": "x/1wx 0x40000024"
+      },
+      "result": "0x40000024:\t0xbe9acc02\n",
+      "t": 79.36
+    },
+    {
+      "step": 9,
+      "thought": "",
+      "tool": "apply_patch",
+      "args": {
+        "new_text": "  TIM2_CR1 = 1;",
+        "path": "main.c",
+        "root_cause": "The timer was not actually enabled because the code set the URS (Update Request Source) bit instead of the CEN (Counter Enable) bit in TIM2_CR1. Bit 0 is CEN, bit 1 is URS. Setting bit 0 starts the timer.",
+        "old_text": "  TIM2_CR1 = (1u << 1);"
+      },
+      "result": "PATCH APPLIED:\n--- a/main.c\n+++ b/main.c\n@@ -12,7 +12,7 @@\n   TIM2_CNT = 0;\n   TIM2_SR = 0;\n   TIM2_DIER = TIM_DIER_UIE;          /* update event flag/interrupt (IRQ stays masked in NVIC) */\n-  TIM2_CR1 = (1u << 1);\n+  TIM2_CR1 = 1;\n }\n \n static int wait_heartbeat(void)\n\nNow call verify_fix.",
+      "t": 84.36
+    },
+    {
+      "step": 10,
+      "thought": "",
+      "tool": "verify_fix",
+      "args": {},
+      "result": "VERIFY: PASS\nBUILD: OK\nRUN STATUS: NO_FAULT\nUART OUTPUT: 'boot ok\\ntick ok\\ninit done\\n'\nEXPECTED LINES: ['boot ok', 'tick ok', 'init done']\nUART CHECK: all expected lines present\nCPU HALTED AT (end of run window): main + 52 in section .text main.c:34\nBACKTRACE:\n#0  0x08000258 in main () at main.c:34\nSOURCE AROUND main.c:34:\n  30:   uart_puts(\"boot ok\\n\");\n  31:   heartbeat_timer_init();\n  32:   uart_puts(wait_heartbeat() ? \"tick ok\\n\" : \"tick timeout\\n\");\n  33:   uart_puts(\"init done\\n\");\n> 34:   for (;;);\n  35: }",
+      "t": 92.84
+    }
+  ]
+}
