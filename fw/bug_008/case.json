@@ -1,0 +1,10 @@
+{
+  "id": "bug_008",
+  "category": "Initialization error",
+  "bug_report": "The board crashes while printing the sensor average during start-up.",
+  "expected_output": [
+    "boot ok",
+    "avg 25",
+    "init done"
+  ]
+}

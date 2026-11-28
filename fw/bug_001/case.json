@@ -1,0 +1,10 @@
+{
+  "id": "bug_001",
+  "category": "Pointer error",
+  "bug_report": "After printing 'boot ok' the board stops responding on serial.",
+  "expected_output": [
+    "boot ok",
+    "rx ok",
+    "init done"
+  ]
+}

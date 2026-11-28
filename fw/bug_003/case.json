@@ -1,0 +1,10 @@
+{
+  "id": "bug_003",
+  "category": "Register error",
+  "bug_report": "The heartbeat timer never fires: the firmware always prints 'tick timeout'.",
+  "expected_output": [
+    "boot ok",
+    "tick ok",
+    "init done"
+  ]
+}

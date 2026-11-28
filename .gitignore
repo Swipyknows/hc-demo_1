@@ -20,6 +20,7 @@ fw/*.elf
 
 # Generated execution workspace
 /workspaces/
+.vscode/
 
 # Agent execution traces
 /trace.jsonl

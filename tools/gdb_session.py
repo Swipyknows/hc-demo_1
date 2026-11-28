@@ -1,55 +1,39 @@
-"""Milestone 1: QEMU + GDB debugging."""
+"""Manual QEMU + GDB debugging session for one benchmark case.
+
+Usage:  python -m tools.gdb_session [bug_001]
+"""
+import json
+import sys
 
 from tools.target import Target
 
+case = sys.argv[1] if len(sys.argv) > 1 else "bug_001"
 
-t = Target()
 
-try:
+def section(title):
+    print(f"\n========== {title} ==========")
 
-    # Step 1: Compile firmware
+
+with Target(f"fw/{case}", f"workspaces/session_{case}") as t:
     ok, out = t.build()
-
-    print("\n========== BUILD ==========")
-
+    section("BUILD")
     print("SUCCESS" if ok else "FAILED")
     print(out)
-
     if not ok:
-        raise RuntimeError("Firmware compilation failed")
+        sys.exit(1)
 
-    # Step 2: Start QEMU and GDB
-    print("\n========== STARTING QEMU ==========")
-
+    section("EXECUTION")
     t.start()
+    print("Status:", t.run())
 
-    # Step 3: Execute firmware
-    print("\n========== EXECUTION ==========")
-
-    status = t.run()
-
-    print("Status:", status)
-
-    # Step 4: Capture UART
-    print("\n========== UART OUTPUT ==========")
-
+    section("UART OUTPUT")
     print(t.read_uart())
 
-    # Step 5: Inspect fault registers
-    print("\n========== FAULT REGISTERS ==========")
+    section("FAULT REGISTERS")
+    print(json.dumps(t.fault_registers(), indent=2))
 
-    print(t.fault_registers())
-
-    # Step 6: Inspect processor registers
-    print("\n========== CPU REGISTERS ==========")
-
+    section("CPU REGISTERS")
     print(t.cmd("info registers"))
 
-    # Step 7: Inspect backtrace
-    print("\n========== BACKTRACE ==========")
-
-    print(t.cmd("bt"))
-
-finally:
-
-    t.stop()
+    section("BACKTRACE")
+    print(t.backtrace())

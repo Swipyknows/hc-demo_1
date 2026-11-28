@@ -1,0 +1,10 @@
+{
+  "id": "bug_009",
+  "category": "Control-flow error",
+  "bug_report": "The firmware hangs after 'boot ok' while flushing a queue of 5 packets.",
+  "expected_output": [
+    "boot ok",
+    "batches 3",
+    "init done"
+  ]
+}

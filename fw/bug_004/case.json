@@ -1,0 +1,10 @@
+{
+  "id": "bug_004",
+  "category": "UART error",
+  "bug_report": "Nothing at all appears on the serial console after reset.",
+  "expected_output": [
+    "boot ok",
+    "console ready",
+    "init done"
+  ]
+}

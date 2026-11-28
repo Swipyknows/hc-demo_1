@@ -1,0 +1,10 @@
+{
+  "id": "bug_006",
+  "category": "Bit manipulation",
+  "bug_report": "After the status LED is switched off, the report shows the LED still on and the buzzer off.",
+  "expected_output": [
+    "boot ok",
+    "led=0 buzzer=1",
+    "init done"
+  ]
+}
