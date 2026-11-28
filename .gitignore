@@ -24,3 +24,6 @@ fw/*.elf
 
 # Agent execution traces
 /trace.jsonl
+
+# Vendor PDFs for RAG (copyrighted, do not commit)
+knowledge_base/documentation/*.pdf

@@ -17,7 +17,7 @@ The copilot receives firmware source code and a bug description, then:
 7. Rebuilds and reruns the corrected firmware.
 8. Independently verifies whether the bug is fixed.
 
-The benchmark contains 10 seeded bugs (`fw/bug_001` … `fw/bug_010`). The demo case,
+The benchmark contains 10 seeded bugs (`fw/bug_001` â€¦ `fw/bug_010`). The demo case,
 `bug_001`, is an unregistered function pointer that causes a Cortex-M3 HardFault.
 Its expected output is:
 
@@ -152,6 +152,6 @@ Add `--auto` to apply patches without manual approval.
 The hidden evaluator rebuilds the firmware, runs it in QEMU, and checks that it
 does not fault, prints the expected lines in order, and prints no forbidden output.
 
-- `PASS` — Bug fixed successfully
-- `FAIL` — Fault or incorrect behavior remains
-- `BUILD_FAIL` — Patched firmware does not compile
+- `PASS` â€” Bug fixed successfully
+- `FAIL` â€” Fault or incorrect behavior remains
+- `BUILD_FAIL` â€” Patched firmware does not compile

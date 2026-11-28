@@ -1,11 +1,11 @@
-"""One interface to any LLM.
+"""Gemini access through LiteLLM.
 
-Every LLM callable takes (messages, tools) and returns
+litellm_chat(messages, tools) returns
     {"content": str, "tool_calls": [{"id": str, "name": str, "args": dict}]}
 
-Switch models with the MODEL env var, for example:
-    gemini/gemini-2.5-flash   (needs GEMINI_API_KEY)
-    ollama/qwen2.5-coder:7b   (local, free)
+Configured by environment variables (or .env):
+    MODEL=gemini/gemini-2.5-flash
+    GEMINI_API_KEY=...
 """
 import json
 import os
@@ -24,19 +24,3 @@ def litellm_chat(messages, tools):
         for c in (m.tool_calls or [])
     ]
     return {"content": m.content or "", "tool_calls": calls}
-
-
-class ScriptedLLM:
-    """Offline stand-in used to test the plumbing: replays a fixed list of (tool, args)."""
-
-    def __init__(self, script):
-        self.script = list(script)
-        self.n = 0
-
-    def __call__(self, messages, tools):
-        name, args = self.script.pop(0)
-        self.n += 1
-        return {
-            "content": f"(scripted step {self.n})",
-            "tool_calls": [{"id": f"c{self.n}", "name": name, "args": args}],
-        }
