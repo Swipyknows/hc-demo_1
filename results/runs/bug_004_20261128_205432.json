@@ -1,0 +1,90 @@
+{
+  "case": "bug_004",
+  "model": "gemini/gemini-3.1-flash-lite",
+  "bug_report": "Nothing at all appears on the serial console after reset.",
+  "expected_output": [
+    "boot ok",
+    "console ready",
+    "init done"
+  ],
+  "rag": true,
+  "started": "2026-11-28 20:53:30",
+  "agent": {
+    "outcome": "FIXED",
+    "steps": 3,
+    "fix_attempts": 1,
+    "root_cause": "The console driver was configured to use USART2_BASE, but the QEMU console is connected to USART1_BASE.",
+    "patch": "--- a/main.c\n+++ b/main.c\n@@ -14,7 +14,7 @@\n \n int main(void)\n {\n-  console_init(USART2_BASE);\n+  console_init(USART1_BASE);\n   console_puts(\"boot ok\\n\");\n   console_puts(\"console ready\\n\");\n   console_puts(\"init done\\n\");\n",
+    "rag_queries": [],
+    "initial_evidence": {
+      "build": "OK",
+      "warnings": [],
+      "status": "NO_FAULT",
+      "uart": "",
+      "uart_check": {
+        "ok": false,
+        "matched": [],
+        "missing": [
+          "boot ok",
+          "console ready",
+          "init done"
+        ],
+        "first_missing": "boot ok",
+        "unexpected": [],
+        "last_line": null
+      },
+      "backtrace": "#0  main () at main.c:21",
+      "halted_at": "main + 28 in section .text main.c:21"
+    },
+    "seconds": 55.9
+  },
+  "seconds": 61.5,
+  "evaluation": {
+    "verdict": "PASS",
+    "build": "SUCCESS",
+    "status": "NO_FAULT",
+    "uart": "boot ok\nconsole ready\ninit done\n",
+    "reason": "expected behaviour observed"
+  },
+  "trace": [
+    {
+      "step": 0,
+      "thought": "initial observation",
+      "tool": "analyze",
+      "args": {},
+      "result": "BUILD: OK\nRUN STATUS: NO_FAULT\nUART OUTPUT: ''\nEXPECTED LINES: ['boot ok', 'console ready', 'init done']\nUART CHECK: missing ['boot ok', 'console ready', 'init done'] (output stops after None)\nCPU HALTED AT (end of run window): main + 28 in section .text main.c:21\nBACKTRACE:\n#0  main () at main.c:21\nSOURCE AROUND main.c:21:\n  17:   console_init(USART2_BASE);\n  18:   console_puts(\"boot ok\\n\");\n  19:   console_puts(\"console ready\\n\");\n  20:   console_puts(\"init done\\n\");\n> 21:   for (;;);\n  22: }",
+      "t": 5.56
+    },
+    {
+      "step": 1,
+      "thought": "",
+      "tool": "read_source",
+      "args": {
+        "path": "board.h"
+      },
+      "result": "1: /* board.h - register map for the QEMU 'netduino2' machine (STM32F205, Cortex-M3).\n2:  * Shared by every benchmark case. Read-only for the debugging agent. */\n3: #ifndef BOARD_H\n4: #define BOARD_H\n5: #include <stdint.h>\n6: \n7: #define REG32(addr)   (*(volatile uint32_t *)(addr))\n8: \n9: /* USART1 (connected to the QEMU serial console) and USART2 (not connected) */\n10: #define USART1_BASE   0x40011000u\n11: #define USART2_BASE   0x40004400u\n12: #define USART_SR(b)   REG32((b) + 0x00)\n13: #define USART_DR(b)   REG32((b) + 0x04)\n14: #define USART_BRR(b)  REG32((b) + 0x08)\n15: #define USART_CR1(b)  REG32((b) + 0x0C)\n16: #define USART_CR1_UE  (1u << 13)\n17: #define USART_CR1_TE  (1u << 3)\n18: #define USART_CR1_RE  (1u << 2)\n19: \n20: /* General-purpose timer TIM2 */\n21: #define TIM2_BASE     0x40000000u\n22: #define TIM2_CR1      REG32(TIM2_BASE + 0x00)\n23: #define TIM2_DIER     REG32(TIM2_BASE + 0x0C)\n24: #define TIM2_SR       REG32(TIM2_BASE + 0x10)\n25: #define TIM2_CNT      REG32(TIM2_BASE + 0x24)\n26: #define TIM2_PSC      REG32(TIM2_BASE + 0x28)\n27: #define TIM2_ARR      REG32(TIM2_BASE + 0x2C)\n28: #define TIM_CR1_CEN   (1u << 0)\n29: #define TIM_SR_UIF    (1u << 0)\n30: #define TIM_DIER_UIE  (1u << 0)\n31: \n32: /* SysTick */\n33: #define SYST_CSR      REG32(0xE000E010)\n34: #define SYST_RVR      REG32(0xE000E014)\n35: #define SYST_CVR      REG32(0xE000E018)\n36: #define SYST_CSR_ENABLE    (1u << 0)\n37: #define SYST_CSR_TICKINT   (1u << 1)\n38: #define SYST_CSR_CLKSOURCE (1u << 2)\n39: \n40: /* System Control Block */\n41: #define SCB_CCR       REG32(0xE000ED14)\n42: #define SCB_CCR_DIV_0_TRP  (1u << 4)\n43: #define SCB_CFSR      REG32(0xE000ED28)\n44: #define SCB_HFSR      REG32(0xE000ED2C)\n45: \n46: /* Memory map */\n47: #define SRAM_BASE     0x20000000u\n48: #define SRAM_SIZE     (128u * 1024u)\n49: \n50: #endif",
+      "t": 39.03
+    },
+    {
+      "step": 2,
+      "thought": "",
+      "tool": "apply_patch",
+      "args": {
+        "old_text": "  console_init(USART2_BASE);",
+        "new_text": "  console_init(USART1_BASE);",
+        "path": "main.c",
+        "root_cause": "The console driver was configured to use USART2_BASE, but the QEMU console is connected to USART1_BASE."
+      },
+      "result": "PATCH APPLIED:\n--- a/main.c\n+++ b/main.c\n@@ -14,7 +14,7 @@\n \n int main(void)\n {\n-  console_init(USART2_BASE);\n+  console_init(USART1_BASE);\n   console_puts(\"boot ok\\n\");\n   console_puts(\"console ready\\n\");\n   console_puts(\"init done\\n\");\n\nNow call verify_fix.",
+      "t": 43.12
+    },
+    {
+      "step": 3,
+      "thought": "",
+      "tool": "verify_fix",
+      "args": {},
+      "result": "VERIFY: PASS\nBUILD: OK\nRUN STATUS: NO_FAULT\nUART OUTPUT: 'boot ok\\nconsole ready\\ninit done\\n'\nEXPECTED LINES: ['boot ok', 'console ready', 'init done']\nUART CHECK: all expected lines present\nCPU HALTED AT (end of run window): main + 30 in section .text main.c:21\nBACKTRACE:\n#0  0x080001dc in main () at main.c:21\nSOURCE AROUND main.c:21:\n  17:   console_init(USART1_BASE);\n  18:   console_puts(\"boot ok\\n\");\n  19:   console_puts(\"console ready\\n\");\n  20:   console_puts(\"init done\\n\");\n> 21:   for (;;);\n  22: }",
+      "t": 55.91
+    }
+  ]
+}

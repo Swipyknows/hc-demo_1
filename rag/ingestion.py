@@ -21,12 +21,17 @@ DOCS = {
     "DUI0552A": ("Cortex-M3 Generic User Guide", None),
     "pm0056": ("PM0056 Cortex-M3 Programming Manual", None),
     "apnt209": ("Keil AN209 Fault Exceptions", None),
+    # 858 pages: keep programmers' models (registers, exception model, faults), memory model,
+    # system address map (SCS, SysTick, NVIC) and register index; skip instruction encodings,
+    # trace/debug units and pseudocode.
     "DDI0403E": ("ARMv7-M Architecture Reference Manual",
-                 ["system level", "exception", "fault", "memory", "debug", "system address",
-                  "nvic", "systick", "programmers' model", "programmer"]),
+                 ["programmers", "architecture memory model", "system address map",
+                  "register index"]),
+    # 1,363 pages: keep only the peripherals and system blocks the benchmark firmware uses.
     "rm0033": ("RM0033 STM32F205 Reference Manual",
-               ["memory", "reset and clock", "interrupts", "general-purpose timers (tim2",
-                "universal synchronous", "debug support", "system configuration"]),
+               ["memory and bus", "reset and clock", "system configuration",
+                "interrupts and events", "general-purpose timers (tim2", "universal synchronous",
+                "debug support"]),
 }
 
 
@@ -59,6 +64,10 @@ def clean(text):
     text = text.replace("­", "")                       # soft hyphens
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n\s*\n+", "\n\n", text)
+    # PDF extraction puts every table cell / line on its own line; register bit-field
+    # diagrams become '15\n14\n...\nrw\nrw'. Join single line breaks so chunks carry
+    # content (e.g. 'Bit 1 UDIS: Update disable') instead of layout noise.
+    text = re.sub(r"(?<!\n)\n(?!\n)", " ", text)
     return text.strip()
 
 

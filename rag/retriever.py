@@ -2,9 +2,13 @@
 
 Usage:  python -m rag.retriever "CFSR INVSTATE bit meaning"
 """
+import re
 import sys
 
 from rag.ingestion import EMBED_MODEL, get_collection
+
+CANDIDATES = 20        # vector-search candidates that are re-ranked
+TERM_WEIGHT = 0.4      # weight of exact query-term overlap in the final score
 
 
 class Retriever:
@@ -18,14 +22,25 @@ class Retriever:
         self.model = SentenceTransformer(EMBED_MODEL)
 
     def __call__(self, query, k=None):
+        """Vector search for CANDIDATES chunks, then re-rank with an exact-term bonus.
+
+        Embeddings capture the topic ('timer control register') but not exact register or
+        bit names ('UDIS', 'DIVBYZERO'), which are what firmware debugging queries contain.
+        """
         emb = self.model.encode([query], normalize_embeddings=True).tolist()
-        r = self.col.query(query_embeddings=emb, n_results=k or self.k,
+        r = self.col.query(query_embeddings=emb, n_results=CANDIDATES,
                            include=["documents", "metadatas", "distances"])
-        hits = [{"text": doc, "source": meta["source"], "file": meta["file"],
-                 "page": meta["page"], "section": meta.get("section", ""),
-                 "score": round(1 - dist, 3)}
-                for doc, meta, dist in zip(r["documents"][0], r["metadatas"][0], r["distances"][0])]
-        return [h for h in hits if h["score"] >= self.min_score]
+        terms = {w.lower() for w in re.findall(r"[A-Za-z_][A-Za-z0-9_]{2,}", query)}
+        hits = []
+        for doc, meta, dist in zip(r["documents"][0], r["metadatas"][0], r["distances"][0]):
+            words = set(re.findall(r"[a-z0-9_]+", doc.lower()))
+            overlap = len(terms & words) / len(terms) if terms else 0.0
+            hits.append({"text": doc, "source": meta["source"], "file": meta["file"],
+                         "page": meta["page"], "section": meta.get("section", ""),
+                         "similarity": round(1 - dist, 3),
+                         "score": round((1 - TERM_WEIGHT) * (1 - dist) + TERM_WEIGHT * overlap, 3)})
+        hits.sort(key=lambda h: h["score"], reverse=True)
+        return [h for h in hits if h["similarity"] >= self.min_score][:k or self.k]
 
 
 def load_retriever(**kw):

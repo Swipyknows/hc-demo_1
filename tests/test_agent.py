@@ -1,5 +1,6 @@
 """Stage 3 tests: analysis, agent loop (with a scripted LLM, no API calls), RAG chunking."""
 import json
+import os
 import shutil
 
 import pytest
@@ -47,6 +48,29 @@ def test_chunking_overlaps_and_bounds():
     parts = chunk(text, size=300, overlap=60)
     assert len(parts) > 10 and all(len(p) <= 300 for p in parts)
     assert parts[0].split()[-1] in parts[1]                    # overlap carries context
+
+
+def test_clean_joins_layout_lines():
+    from rag.ingestion import clean
+    assert clean("Bit 1\nUDIS: Update disable\n\nNext para") == "Bit 1 UDIS: Update disable\n\nNext para"
+
+
+needs_index = pytest.mark.skipif(not os.path.isdir("knowledge_base/chroma"),
+                                 reason="RAG index not built (python -m rag.ingestion)")
+
+
+@needs_index
+@pytest.mark.parametrize("query,source", [
+    ("BusFault PRECISERR BFAR imprecise", "Cortex-M3"),
+    ("TIM2 CR1 counter enable CEN UDIS", "RM0033"),
+    ("SysTick exception handler vector table", "Cortex-M3"),
+])
+def test_retriever_finds_relevant_manual(query, source):
+    from rag.retriever import Retriever
+    hits = Retriever(k=3)(query)
+    assert hits and all(h["page"] > 0 for h in hits)
+    assert [h["score"] for h in hits] == sorted((h["score"] for h in hits), reverse=True)
+    assert any(source in h["source"] or source in h["file"] for h in hits)
 
 
 def test_doc_info_maps_known_manuals():
