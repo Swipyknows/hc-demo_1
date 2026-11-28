@@ -1,0 +1,113 @@
+{
+  "case": "bug_008",
+  "model": "gemini/gemini-3.1-flash-lite",
+  "bug_report": "The board crashes while printing the sensor average during start-up.",
+  "expected_output": [
+    "boot ok",
+    "avg 25",
+    "init done"
+  ],
+  "rag": true,
+  "started": "2026-11-28 20:35:25",
+  "agent": {
+    "outcome": "FIXED",
+    "steps": 4,
+    "fix_attempts": 1,
+    "root_cause": "The code calls report_average() before sensors_init(), leading to division by zero because sample_count is initialized to zero by default.",
+    "patch": "--- a/main.c\n+++ b/main.c\n@@ -33,8 +33,8 @@\n   SCB_CCR |= SCB_CCR_DIV_0_TRP;          /* safety: trap on divide-by-zero */\n   USART_CR1(USART1_BASE) = USART_CR1_UE | USART_CR1_TE;\n   uart_puts(\"boot ok\\n\");\n+  sensors_init();\n   report_average();\n-  sensors_init();\n   uart_puts(\"init done\\n\");\n   for (;;);\n }\n",
+    "rag_queries": [],
+    "initial_evidence": {
+      "build": "OK",
+      "warnings": [],
+      "status": "HARDFAULT",
+      "uart": "boot ok\navg ",
+      "uart_check": {
+        "ok": false,
+        "matched": [
+          "boot ok"
+        ],
+        "missing": [
+          "avg 25",
+          "init done"
+        ],
+        "first_missing": "avg 25",
+        "unexpected": [
+          "avg"
+        ],
+        "last_line": "avg"
+      },
+      "backtrace": "#0  HardFault_Handler () at startup.c:21\n#1  <signal handler called>\n#2  0x0800026a in report_average () at main.c:27\n#3  0x080002b6 in main () at main.c:36",
+      "fault": {
+        "CFSR": "0x2000000",
+        "HFSR": "0x40000000",
+        "active_flags": [
+          "DIVBYZERO",
+          "FORCED"
+        ],
+        "exception": "HardFault",
+        "faulting_pc": "0x800026a",
+        "faulting_location": "report_average + 54 in section .text main.c:27",
+        "caller_lr": "0x800017d",
+        "caller_location": "uart_puts + 24 in section .text main.c:4"
+      }
+    },
+    "seconds": 51.7
+  },
+  "seconds": 57.3,
+  "evaluation": {
+    "verdict": "PASS",
+    "build": "SUCCESS",
+    "status": "NO_FAULT",
+    "uart": "boot ok\navg 25\ninit done\n",
+    "reason": "expected behaviour observed"
+  },
+  "trace": [
+    {
+      "step": 0,
+      "thought": "initial observation",
+      "tool": "analyze",
+      "args": {},
+      "result": "BUILD: OK\nRUN STATUS: HARDFAULT\nUART OUTPUT: 'boot ok\\navg '\nEXPECTED LINES: ['boot ok', 'avg 25', 'init done']\nUART CHECK: missing ['avg 25', 'init done'] (output stops after 'avg')\nUNEXPECTED UART LINES: ['avg']\nFAULT: CFSR=0x2000000, HFSR=0x40000000, active_flags=['DIVBYZERO', 'FORCED'], exception=HardFault, faulting_pc=0x800026a, faulting_location=report_average + 54 in section .text main.c:27, caller_lr=0x800017d, caller_location=uart_puts + 24 in section .text main.c:4\nBACKTRACE:\n#0  HardFault_Handler () at startup.c:21\n#1  <signal handler called>\n#2  0x0800026a in report_average () at main.c:27\n#3  0x080002b6 in main () at main.c:36\nSOURCE AROUND main.c:27:\n  23: {\n  24:   uint32_t total = 0;\n  25:   for (uint32_t i = 0; i < 4; i++) total += samples[i];\n  26:   uart_puts(\"avg \");\n> 27:   uart_putu(total / sample_count);\n  28:   uart_puts(\"\\n\");\n  29: }\n  30: \n  31: int main(void)\nSOURCE AROUND main.c:4:\n  1: #include \"board.h\"\n  2: \n  3: static void uart_putc(char c) { USART_DR(USART1_BASE) = c; }\n> 4: static void uart_puts(const char *s) { while (*s) uart_putc(*s++); }\n  5: static void uart_putu(uint32_t v)\n  6: {\n  7:   char b[11]; int i = 10; b[i] = 0;\n  8:   do { b[--i] = '0' + v % 10; v /= 10; } while (v);",
+      "t": 5.58
+    },
+    {
+      "step": 1,
+      "thought": "",
+      "tool": "run_firmware",
+      "args": {},
+      "result": "BUILD: OK\nRUN STATUS: HARDFAULT\nUART OUTPUT: 'boot ok\\navg '\nEXPECTED LINES: ['boot ok', 'avg 25', 'init done']\nUART CHECK: missing ['avg 25', 'init done'] (output stops after 'avg')\nUNEXPECTED UART LINES: ['avg']\nFAULT: CFSR=0x2000000, HFSR=0x40000000, active_flags=['DIVBYZERO', 'FORCED'], exception=HardFault, faulting_pc=0x800026a, faulting_location=report_average + 54 in section .text main.c:27, caller_lr=0x800017d, caller_location=uart_puts + 24 in section .text main.c:4\nBACKTRACE:\n#0  HardFault_Handler () at startup.c:21\n#1  <signal handler called>\n#2  0x0800026a in report_average () at main.c:27\n#3  0x080002b6 in main () at main.c:36\nSOURCE AROUND main.c:27:\n  23: {\n  24:   uint32_t total = 0;\n  25:   for (uint32_t i = 0; i < 4; i++) total += samples[i];\n  26:   uart_puts(\"avg \");\n> 27:   uart_putu(total / sample_count);\n  28:   uart_puts(\"\\n\");\n  29: }\n  30: \n  31: int main(void)\nSOURCE AROUND main.c:4:\n  1: #include \"board.h\"\n  2: \n  3: static void uart_putc(char c) { USART_DR(USART1_BASE) = c; }\n> 4: static void uart_puts(const char *s) { while (*s) uart_putc(*s++); }\n  5: static void uart_putu(uint32_t v)\n  6: {\n  7:   char b[11]; int i = 10; b[i] = 0;\n  8:   do { b[--i] = '0' + v % 10; v /= 10; } while (v);",
+      "t": 40.68
+    },
+    {
+      "step": 2,
+      "thought": "",
+      "tool": "gdb_command",
+      "args": {
+        "command": "p sample_count"
+      },
+      "result": "$1 = 0\n",
+      "t": 42.47
+    },
+    {
+      "step": 3,
+      "thought": "",
+      "tool": "apply_patch",
+      "args": {
+        "path": "main.c",
+        "new_text": "  sensors_init();\n  report_average();\n  uart_puts(\"init done\\n\");",
+        "root_cause": "The code calls report_average() before sensors_init(), leading to division by zero because sample_count is initialized to zero by default.",
+        "old_text": "  report_average();\n  sensors_init();\n  uart_puts(\"init done\\n\");"
+      },
+      "result": "PATCH APPLIED:\n--- a/main.c\n+++ b/main.c\n@@ -33,8 +33,8 @@\n   SCB_CCR |= SCB_CCR_DIV_0_TRP;          /* safety: trap on divide-by-zero */\n   USART_CR1(USART1_BASE) = USART_CR1_UE | USART_CR1_TE;\n   uart_puts(\"boot ok\\n\");\n+  sensors_init();\n   report_average();\n-  sensors_init();\n   uart_puts(\"init done\\n\");\n   for (;;);\n }\n\nNow call verify_fix.",
+      "t": 44.16
+    },
+    {
+      "step": 4,
+      "thought": "",
+      "tool": "verify_fix",
+      "args": {},
+      "result": "VERIFY: PASS\nBUILD: OK\nRUN STATUS: NO_FAULT\nUART OUTPUT: 'boot ok\\navg 25\\ninit done\\n'\nEXPECTED LINES: ['boot ok', 'avg 25', 'init done']\nUART CHECK: all expected lines present\nCPU HALTED AT (end of run window): main + 44 in section .text main.c:39\nBACKTRACE:\n#0  main () at main.c:39\nSOURCE AROUND main.c:39:\n  35:   uart_puts(\"boot ok\\n\");\n  36:   sensors_init();\n  37:   report_average();\n  38:   uart_puts(\"init done\\n\");\n> 39:   for (;;);\n  40: }",
+      "t": 51.65
+    }
+  ]
+}

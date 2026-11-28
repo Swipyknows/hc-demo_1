@@ -34,9 +34,10 @@ init done
 - **Simulator:** QEMU
 - **Debugger:** GDB with pygdbmi
 - **AI/Backend:** Python, Gemini, LiteLLM
+- **RAG:** PyMuPDF, Sentence Transformers (`all-MiniLM-L6-v2`), ChromaDB
 - **Environment:** uv
+- **Testing:** Pytest
 - **Future Interface:** Streamlit
-- **Future RAG:** ChromaDB, Sentence Transformers, PyMuPDF
 
 ## Architecture
 
@@ -59,7 +60,17 @@ Rebuild -> Execute -> Hidden Evaluation
 ## Repository Structure
 
 ```text
-agent/                AI agent and LLM integration
+agent/
+  agent.py            Agent loop and its 9 tools
+  analysis.py         Source + runtime evidence report (UART vs expected, fault, source context)
+  prompts.py          System prompt and initial observation
+  llm.py              Gemini via LiteLLM
+rag/
+  ingestion.py        PDF -> text -> chunks -> embeddings -> ChromaDB
+  retriever.py        Similarity search used by retrieve_docs()
+knowledge_base/
+  documentation/      Vendor PDFs (git-ignored, see "Knowledge base")
+  chroma/             Generated vector index (git-ignored)
 evaluator/
   hidden_check.py     Independent verifier (hidden from the agent)
   cases.json          Hidden root causes, reference fixes, verification conditions
@@ -71,7 +82,7 @@ tools/
   target.py           QEMU/GDB lifecycle and agent tools
   gdb_session.py      Manual debugging session for one case
 tests/                Pytest unit + QEMU integration tests
-results/              Benchmark / experiment results (JSON)
+results/              Benchmark results; results/runs/ holds one JSON per agent run
 run_demo.py           Demo entry point
 ```
 
@@ -110,6 +121,51 @@ evaluation workspace, so the verdict cannot be influenced by other files.
 | `make_patch()` / `apply_patch()` / `revert()` / `total_diff()` | Patch `main.c` only, with diff for approval |
 | `rebuild_and_run()` | Rebuild, reboot, run, collect evidence |
 
+## AI Agent
+
+One agent (Gemini via LiteLLM) runs the loop **Observe -> Analyze -> Debug -> Fix -> Verify**:
+
+1. **Observe** (automatic): read `main.c`, build, run in QEMU, and produce the evidence
+   report from `agent/analysis.py`.
+2. **Analyze / Debug**: the LLM reasons over the evidence and calls tools for more.
+3. **Fix**: `apply_patch` with a stated root cause; a human approves every patch.
+4. **Verify**: `verify_fix` rebuilds, reruns and checks the expected UART output.
+   On failure the agent investigates again.
+
+| Tool | Function |
+|------|----------|
+| `read_source()` | Read firmware source code |
+| `build_firmware()` | Compile firmware |
+| `run_firmware()` | Build, run in QEMU, return the analysed evidence report |
+| `read_uart()` | Capture UART output |
+| `gdb_command()` | Execute a (sandboxed) GDB command |
+| `fault_registers()` | Read decoded fault information |
+| `retrieve_docs()` | Search the RAG knowledge base |
+| `apply_patch()` | Apply a human-approved patch to `main.c` |
+| `verify_fix()` | Rebuild and test against the expected output |
+
+Limits: at most 3 failed fix attempts and 25 steps per run. The independent hidden
+evaluator then judges the result.
+
+## Knowledge Base (RAG)
+
+The PDFs in `knowledge_base/documentation/` are copyrighted and not committed. Download:
+
+| File | Document |
+|------|----------|
+| `DUI0552A_cortex_m3_dgug.pdf` | Arm Cortex-M3 Devices Generic User Guide |
+| `pm0056-...-programming-manual-...pdf` | ST PM0056 Cortex-M3 programming manual |
+| `rm0033-stm32-armbased-32bit.pdf` | ST RM0033 STM32F205 reference manual (relevant chapters only) |
+| `apnt209.pdf` | Keil Application Note 209: Cortex-M fault exceptions |
+| `DDI0403E_e_armv7m_arm.pdf` | ARMv7-M Architecture Reference Manual (system-level chapters only) |
+
+Build the index once (re-run with `--rebuild` after changing documents):
+
+```bash
+uv run python -m rag.ingestion
+uv run python -m rag.retriever "CFSR INVSTATE bit meaning"   # test a query
+```
+
 ## Running the Project
 
 Install the required tools on Ubuntu or WSL2:
@@ -138,14 +194,18 @@ Run the tests:
 uv run pytest
 ```
 
-Run the demo with Gemini (any case, default `bug_001`):
+Run the agent with Gemini (any case, default `bug_005`). `MODEL` and `GEMINI_API_KEY`
+are read from `.env`:
 
 ```bash
-MODEL=gemini/gemini-2.5-flash GEMINI_API_KEY=... \
-uv run python3 run_demo.py bug_001
+uv run python run_demo.py bug_001
 ```
 
-Add `--auto` to apply patches without manual approval.
+- `--auto` applies patches without manual approval.
+- `--no-rag` disables documentation retrieval.
+
+Each run prints the agent's root cause and the hidden evaluator's verdict, and is saved
+to `results/runs/<case>_<timestamp>.json` (patch, verdict, documentation queries, trace).
 
 ## Verification
 

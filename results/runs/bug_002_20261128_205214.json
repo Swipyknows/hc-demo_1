@@ -1,0 +1,171 @@
+{
+  "case": "bug_002",
+  "model": "gemini/gemini-3.1-flash-lite",
+  "bug_report": "The event-log self-test always reports 'log corrupt' after boot.",
+  "expected_output": [
+    "boot ok",
+    "log ok",
+    "init done"
+  ],
+  "rag": true,
+  "started": "2026-11-28 20:49:45",
+  "agent": {
+    "outcome": "FIXED",
+    "steps": 11,
+    "fix_attempts": 1,
+    "root_cause": "The log_event function already treats the index as a word offset; multiplying by sizeof(uint32_t) caused out-of-bounds access and corrupted the log.",
+    "patch": "--- a/main.c\n+++ b/main.c\n@@ -19,7 +19,7 @@\n   uart_puts(\"boot ok\\n\");\n \n   for (uint32_t i = 0; i < LOG_ENTRIES; i++)\n-    log_event(i * sizeof(uint32_t), 0xA5000000u | i);\n+    log_event(i, 0xA5000000u | i);\n \n   uint32_t sum = 0;\n   for (uint32_t i = 0; i < LOG_ENTRIES; i++)\n",
+    "rag_queries": [],
+    "initial_evidence": {
+      "build": "OK",
+      "warnings": [],
+      "status": "NO_FAULT",
+      "uart": "boot ok\nlog corrupt\ninit done\n",
+      "uart_check": {
+        "ok": false,
+        "matched": [
+          "boot ok"
+        ],
+        "missing": [
+          "log ok",
+          "init done"
+        ],
+        "first_missing": "log ok",
+        "unexpected": [
+          "log corrupt"
+        ],
+        "last_line": "init done"
+      },
+      "backtrace": "#0  0x08000230 in main () at main.c:29",
+      "halted_at": "main + 124 in section .text main.c:29"
+    },
+    "seconds": 143.3
+  },
+  "seconds": 148.9,
+  "evaluation": {
+    "verdict": "PASS",
+    "build": "SUCCESS",
+    "status": "NO_FAULT",
+    "uart": "boot ok\nlog ok\ninit done\n",
+    "reason": "expected behaviour observed"
+  },
+  "trace": [
+    {
+      "step": 0,
+      "thought": "initial observation",
+      "tool": "analyze",
+      "args": {},
+      "result": "BUILD: OK\nRUN STATUS: NO_FAULT\nUART OUTPUT: 'boot ok\\nlog corrupt\\ninit done\\n'\nEXPECTED LINES: ['boot ok', 'log ok', 'init done']\nUART CHECK: missing ['log ok', 'init done'] (output stops after 'init done')\nUNEXPECTED UART LINES: ['log corrupt']\nCPU HALTED AT (end of run window): main + 124 in section .text main.c:29\nBACKTRACE:\n#0  0x08000230 in main () at main.c:29\nSOURCE AROUND main.c:29:\n  25:   for (uint32_t i = 0; i < LOG_ENTRIES; i++)\n  26:     sum += event_log[i] & 0xFF;\n  27:   uart_puts(sum == 2016 ? \"log ok\\n\" : \"log corrupt\\n\");\n  28:   uart_puts(\"init done\\n\");\n> 29:   for (;;);\n  30: }",
+      "t": 5.55
+    },
+    {
+      "step": 1,
+      "thought": "",
+      "tool": "read_source",
+      "args": {
+        "path": "main.c"
+      },
+      "result": "1: #include \"board.h\"\n2: \n3: static void uart_putc(char c) { USART_DR(USART1_BASE) = c; }\n4: static void uart_puts(const char *s) { while (*s) uart_putc(*s++); }\n5: \n6: /* Event log kept in the last 256 bytes of SRAM so it survives a warm reset */\n7: #define LOG_ENTRIES 64\n8: #define LOG_BASE    (SRAM_BASE + SRAM_SIZE - LOG_ENTRIES * 4)\n9: static uint32_t *const event_log = (uint32_t *)LOG_BASE;\n10: \n11: static void log_event(uint32_t offset, uint32_t value)\n12: {\n13:   event_log[offset] = value;\n14: }\n15: \n16: int main(void)\n17: {\n18:   USART_CR1(USART1_BASE) = USART_CR1_UE | USART_CR1_TE;\n19:   uart_puts(\"boot ok\\n\");\n20: \n21:   for (uint32_t i = 0; i < LOG_ENTRIES; i++)\n22:     log_event(i * sizeof(uint32_t), 0xA5000000u | i);\n23: \n24:   uint32_t sum = 0;\n25:   for (uint32_t i = 0; i < LOG_ENTRIES; i++)\n26:     sum += event_log[i] & 0xFF;\n27:   uart_puts(sum == 2016 ? \"log ok\\n\" : \"log corrupt\\n\");\n28:   uart_puts(\"init done\\n\");\n29:   for (;;);\n30: }",
+      "t": 38.01
+    },
+    {
+      "step": 2,
+      "thought": "",
+      "tool": "run_firmware",
+      "args": {},
+      "result": "BUILD: OK\nRUN STATUS: NO_FAULT\nUART OUTPUT: 'boot ok\\nlog corrupt\\ninit done\\n'\nEXPECTED LINES: ['boot ok', 'log ok', 'init done']\nUART CHECK: missing ['log ok', 'init done'] (output stops after 'init done')\nUNEXPECTED UART LINES: ['log corrupt']\nCPU HALTED AT (end of run window): main + 124 in section .text main.c:29\nBACKTRACE:\n#0  0x08000230 in main () at main.c:29\nSOURCE AROUND main.c:29:\n  25:   for (uint32_t i = 0; i < LOG_ENTRIES; i++)\n  26:     sum += event_log[i] & 0xFF;\n  27:   uart_puts(sum == 2016 ? \"log ok\\n\" : \"log corrupt\\n\");\n  28:   uart_puts(\"init done\\n\");\n> 29:   for (;;);\n  30: }",
+      "t": 44.57
+    },
+    {
+      "step": 3,
+      "thought": "",
+      "tool": "gdb_command",
+      "args": {
+        "command": "p event_log[0]"
+      },
+      "result": "$1 = 2768240640\n",
+      "t": 56.8
+    },
+    {
+      "step": 4,
+      "thought": "",
+      "tool": "gdb_command",
+      "args": {
+        "command": "p/x event_log[0]"
+      },
+      "result": "$2 = 0xa5000000\n",
+      "t": 59.04
+    },
+    {
+      "step": 5,
+      "thought": "",
+      "tool": "gdb_command",
+      "args": {
+        "command": "p sizeof(uint32_t)"
+      },
+      "result": "$3 = 4\n",
+      "t": 60.78
+    },
+    {
+      "step": 6,
+      "thought": "",
+      "tool": "gdb_command",
+      "args": {
+        "command": "p/x event_log[1]"
+      },
+      "result": "$4 = 0x0\n",
+      "t": 62.33
+    },
+    {
+      "step": 7,
+      "thought": "",
+      "tool": "gdb_command",
+      "args": {
+        "command": "p/x (unsigned int)event_log[0]"
+      },
+      "result": "$5 = 0xa5000000\n",
+      "t": 68.07
+    },
+    {
+      "step": 8,
+      "thought": "",
+      "tool": "gdb_command",
+      "args": {
+        "command": "p/x (unsigned int)event_log[4]"
+      },
+      "result": "$6 = 0xa5000001\n",
+      "t": 69.78
+    },
+    {
+      "step": 9,
+      "thought": "",
+      "tool": "gdb_command",
+      "args": {
+        "command": "p/x (unsigned int)event_log[8]"
+      },
+      "result": "$7 = 0xa5000002\n",
+      "t": 71.21
+    },
+    {
+      "step": 10,
+      "thought": "",
+      "tool": "apply_patch",
+      "args": {
+        "old_text": "  for (uint32_t i = 0; i < LOG_ENTRIES; i++)\n    log_event(i * sizeof(uint32_t), 0xA5000000u | i);",
+        "path": "main.c",
+        "root_cause": "The log_event function already treats the index as a word offset; multiplying by sizeof(uint32_t) caused out-of-bounds access and corrupted the log.",
+        "new_text": "  for (uint32_t i = 0; i < LOG_ENTRIES; i++)\n    log_event(i, 0xA5000000u | i);"
+      },
+      "result": "PATCH APPLIED:\n--- a/main.c\n+++ b/main.c\n@@ -19,7 +19,7 @@\n   uart_puts(\"boot ok\\n\");\n \n   for (uint32_t i = 0; i < LOG_ENTRIES; i++)\n-    log_event(i * sizeof(uint32_t), 0xA5000000u | i);\n+    log_event(i, 0xA5000000u | i);\n \n   uint32_t sum = 0;\n   for (uint32_t i = 0; i < LOG_ENTRIES; i++)\n\nNow call verify_fix.",
+      "t": 73.03
+    },
+    {
+      "step": 11,
+      "thought": "",
+      "tool": "verify_fix",
+      "args": {},
+      "result": "VERIFY: PASS\nBUILD: OK\nRUN STATUS: NO_FAULT\nUART OUTPUT: 'boot ok\\nlog ok\\ninit done\\n'\nEXPECTED LINES: ['boot ok', 'log ok', 'init done']\nUART CHECK: all expected lines present\nCPU HALTED AT (end of run window): main + 118 in section .text main.c:29\nBACKTRACE:\n#0  main () at main.c:29\nSOURCE AROUND main.c:29:\n  25:   for (uint32_t i = 0; i < LOG_ENTRIES; i++)\n  26:     sum += event_log[i] & 0xFF;\n  27:   uart_puts(sum == 2016 ? \"log ok\\n\" : \"log corrupt\\n\");\n  28:   uart_puts(\"init done\\n\");\n> 29:   for (;;);\n  30: }",
+      "t": 143.25
+    }
+  ]
+}

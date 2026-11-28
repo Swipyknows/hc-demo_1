@@ -1,0 +1,157 @@
+{
+  "case": "bug_003",
+  "model": "gemini/gemini-3.1-flash-lite",
+  "bug_report": "The heartbeat timer never fires: the firmware always prints 'tick timeout'.",
+  "expected_output": [
+    "boot ok",
+    "tick ok",
+    "init done"
+  ],
+  "rag": true,
+  "started": "2026-11-28 20:43:02",
+  "agent": {
+    "outcome": "FIXED",
+    "steps": 7,
+    "fix_attempts": 1,
+    "root_cause": "The TIM2 timer was never started because bit 0 (CEN) was not set in TIM2_CR1. The original code set bit 1 (URS) instead of bit 0.",
+    "patch": "--- a/main.c\n+++ b/main.c\n@@ -12,7 +12,7 @@\n   TIM2_CNT = 0;\n   TIM2_SR = 0;\n   TIM2_DIER = TIM_DIER_UIE;          /* update event flag/interrupt (IRQ stays masked in NVIC) */\n-  TIM2_CR1 = (1u << 1);\n+  TIM2_CR1 = 1;\n }\n \n static int wait_heartbeat(void)\n",
+    "rag_queries": [
+      {
+        "query": "STM32 TIM2_CR1 URS bit CEN bit",
+        "hits": [
+          {
+            "source": "RM0033 STM32F205 Reference Manual",
+            "page": 406,
+            "score": 0.574
+          },
+          {
+            "source": "RM0033 STM32F205 Reference Manual",
+            "page": 403,
+            "score": 0.535
+          },
+          {
+            "source": "RM0033 STM32F205 Reference Manual",
+            "page": 413,
+            "score": 0.501
+          },
+          {
+            "source": "RM0033 STM32F205 Reference Manual",
+            "page": 413,
+            "score": 0.477
+          }
+        ]
+      }
+    ],
+    "initial_evidence": {
+      "build": "OK",
+      "warnings": [],
+      "status": "NO_FAULT",
+      "uart": "boot ok\ntick timeout\ninit done\n",
+      "uart_check": {
+        "ok": false,
+        "matched": [
+          "boot ok"
+        ],
+        "missing": [
+          "tick ok",
+          "init done"
+        ],
+        "first_missing": "tick ok",
+        "unexpected": [
+          "tick timeout"
+        ],
+        "last_line": "init done"
+      },
+      "backtrace": "#0  main () at main.c:34",
+      "halted_at": "main + 50 in section .text main.c:34"
+    },
+    "seconds": 59.6
+  },
+  "seconds": 65.2,
+  "evaluation": {
+    "verdict": "PASS",
+    "build": "SUCCESS",
+    "status": "NO_FAULT",
+    "uart": "boot ok\ntick ok\ninit done\n",
+    "reason": "expected behaviour observed"
+  },
+  "trace": [
+    {
+      "step": 0,
+      "thought": "initial observation",
+      "tool": "analyze",
+      "args": {},
+      "result": "BUILD: OK\nRUN STATUS: NO_FAULT\nUART OUTPUT: 'boot ok\\ntick timeout\\ninit done\\n'\nEXPECTED LINES: ['boot ok', 'tick ok', 'init done']\nUART CHECK: missing ['tick ok', 'init done'] (output stops after 'init done')\nUNEXPECTED UART LINES: ['tick timeout']\nCPU HALTED AT (end of run window): main + 50 in section .text main.c:34\nBACKTRACE:\n#0  main () at main.c:34\nSOURCE AROUND main.c:34:\n  30:   uart_puts(\"boot ok\\n\");\n  31:   heartbeat_timer_init();\n  32:   uart_puts(wait_heartbeat() ? \"tick ok\\n\" : \"tick timeout\\n\");\n  33:   uart_puts(\"init done\\n\");\n> 34:   for (;;);\n  35: }",
+      "t": 6.45
+    },
+    {
+      "step": 1,
+      "thought": "",
+      "tool": "run_firmware",
+      "args": {},
+      "result": "BUILD: OK\nRUN STATUS: NO_FAULT\nUART OUTPUT: 'boot ok\\ntick timeout\\ninit done\\n'\nEXPECTED LINES: ['boot ok', 'tick ok', 'init done']\nUART CHECK: missing ['tick ok', 'init done'] (output stops after 'init done')\nUNEXPECTED UART LINES: ['tick timeout']\nCPU HALTED AT (end of run window): main + 52 in section .text main.c:34\nBACKTRACE:\n#0  0x08000258 in main () at main.c:34\nSOURCE AROUND main.c:34:\n  30:   uart_puts(\"boot ok\\n\");\n  31:   heartbeat_timer_init();\n  32:   uart_puts(wait_heartbeat() ? \"tick ok\\n\" : \"tick timeout\\n\");\n  33:   uart_puts(\"init done\\n\");\n> 34:   for (;;);\n  35: }",
+      "t": 41.92
+    },
+    {
+      "step": 2,
+      "thought": "",
+      "tool": "read_source",
+      "args": {
+        "path": "main.c"
+      },
+      "result": "1: #include \"board.h\"\n2: \n3: static void uart_putc(char c) { USART_DR(USART1_BASE) = c; }\n4: static void uart_puts(const char *s) { while (*s) uart_putc(*s++); }\n5: \n6: /* TIM2 provides the periodic heartbeat for the control loop */\n7: static void heartbeat_timer_init(void)\n8: {\n9:   TIM2_CR1 = 0;\n10:   TIM2_PSC = 0;\n11:   TIM2_ARR = 1000;\n12:   TIM2_CNT = 0;\n13:   TIM2_SR = 0;\n14:   TIM2_DIER = TIM_DIER_UIE;          /* update event flag/interrupt (IRQ stays masked in NVIC) */\n15:   TIM2_CR1 = (1u << 1);\n16: }\n17: \n18: static int wait_heartbeat(void)\n19: {\n20:   uint32_t spins = 2000000;\n21:   while (!(TIM2_SR & TIM_SR_UIF))\n22:     if (--spins == 0) return 0;\n23:   TIM2_SR = 0;\n24:   return 1;\n25: }\n26: \n27: int main(void)\n28: {\n29:   USART_CR1(USART1_BASE) = USART_CR1_UE | USART_CR1_TE;\n30:   uart_puts(\"boot ok\\n\");\n31:   heartbeat_timer_init();\n32:   uart_puts(wait_heartbeat() ? \"tick ok\\n\" : \"tick timeout\\n\");\n33:   uart_puts(\"init done\\n\");\n34:   for (;;);\n35: }",
+      "t": 43.92
+    },
+    {
+      "step": 3,
+      "thought": "",
+      "tool": "retrieve_docs",
+      "args": {
+        "query": "STM32 TIM2_CR1 URS bit CEN bit"
+      },
+      "result": "[RM0033 STM32F205 Reference Manual p.406]\nGeneral-purpose timers (TIM2 to TIM5) RM0033 406/1363 RM0033 Rev 10 14.4  TIM2 to TIM5 registers Refer to Section 2.2 for a list of abbreviations used in register descriptions. The 32-bit peripheral registers have to be written by words (32 bits). All other peripheral  registers have to be written by half-words (16 bits) or words (32 bits). Read accesses can be  done by bytes (8 bits), half-words (16 bits) or words (32 bits).  14.4.1  TIMx control register 1 (TIMx_CR1) Address offset: 0x00 Reset value: 0x0000\n\n15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 0 Reserved CKD[1:0] ARPE CMS DIR OPM URS UDIS CEN rw rw rw rw rw rw rw rw rw rw Bits 15:10 Reserved, must be kept at reset value. Bits 9:8 CKD: Clock division This bit-field indicates the division ratio between the timer clock (CK_INT) frequency and  sampling clock used by the digital filters (ETR, TIx), 00: tDTS = tCK_INT 01: tDTS = 2 \u00d7 tCK_INT 10: tDTS = 4 \u00d7 tCK_INT 11: Reserved Bit 7 ARPE: Auto-reload preload enable 0: TIMx_ARR register is\n\n[RM0033 STM32F205 Reference Manual p.403]\nRM0033 Rev 10 403/1363 RM0033 General-purpose timers (TIM2 to TIM5) 427 Using one timer to start another timer In this example, we set the enable of Timer 2 with the update event of Timer 1. Refer to  Figure 153 for connections. Timer 2 starts counting from its current value (which can be  nonzero) on the divided internal clock as soon as the update event is generated by Timer 1.  When Timer 2 receives the trigger signal its CEN bit is automatically set and the counter  counts until we write \u20180 to the CEN bit in the TIM2_CR1 register. Both counter clock  frequencies are divided by 3 by the prescaler compared to CK_INT (fCK_CNT = fCK_INT/3). \u2022 Configure Timer 1 master mode to send its Update Event (UEV) as trigger output  (MMS=010 in the TIM1_CR2 register). \u2022 Configure the Timer 1 period (TIM1_ARR registers). \u2022 Configure Timer 2 to get the input trigger from Timer 1 (TS=000 in the TIM2_SMCR  register). \u2022 Configure Timer 2 in trigger mode (SMS=110 in TIM2_SMCR register). \u2022 Start Timer 1\n\n[RM0033 STM32F205 Reference Manual p.413]\non),  if URS=0 and UDIS=0 in the TIMx_CR1 register. 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 0 Reserved TG Res. CC4G CC3G CC2G CC1G UG w w w w w w Bits 15:7 Reserved, must be kept at reset value. Bit 6 TG: Trigger generation This bit is set by software in order to generate an event, it is automatically cleared by  hardware. 0: No action 1: The TIF flag is set in TIMx_SR register. Related interrupt or DMA transfer can occur if  enabled. Bit 5 Reserved, must be kept at reset value. Bit 4 CC4G: Capture/compare 4 generation refer to CC1G description Bit 3 CC3G: Capture/compare 3 generation refer to CC1G description\n\n[RM0033 STM32F205 Reference Manual p.413]\nThis bit is set by hardware on a capture. It is cleared by software or by reading the  TIMx_CCR1 register. 0: No input capture occurred 1: The counter value has been captured in TIMx_CCR1 register (An edge has been d",
+      "t": 45.87
+    },
+    {
+      "step": 4,
+      "thought": "",
+      "tool": "gdb_command",
+      "args": {
+        "command": "p/x TIM2_CR1"
+      },
+      "result": "No symbol \"TIM2_CR1\" in current context.\nerror: No symbol \"TIM2_CR1\" in current context.",
+      "t": 47.68
+    },
+    {
+      "step": 5,
+      "thought": "",
+      "tool": "gdb_command",
+      "args": {
+        "command": "p/x *(unsigned int*)0x40000000"
+      },
+      "result": "$1 = 0x2\n",
+      "t": 48.93
+    },
+    {
+      "step": 6,
+      "thought": "",
+      "tool": "apply_patch",
+      "args": {
+        "root_cause": "The TIM2 timer was never started because bit 0 (CEN) was not set in TIM2_CR1. The original code set bit 1 (URS) instead of bit 0.",
+        "new_text": "  TIM2_CR1 = 1;",
+        "old_text": "  TIM2_CR1 = (1u << 1);",
+        "path": "main.c"
+      },
+      "result": "PATCH APPLIED:\n--- a/main.c\n+++ b/main.c\n@@ -12,7 +12,7 @@\n   TIM2_CNT = 0;\n   TIM2_SR = 0;\n   TIM2_DIER = TIM_DIER_UIE;          /* update event flag/interrupt (IRQ stays masked in NVIC) */\n-  TIM2_CR1 = (1u << 1);\n+  TIM2_CR1 = 1;\n }\n \n static int wait_heartbeat(void)\n\nNow call verify_fix.",
+      "t": 52.76
+    },
+    {
+      "step": 7,
+      "thought": "",
+      "tool": "verify_fix",
+      "args": {},
+      "result": "VERIFY: PASS\nBUILD: OK\nRUN STATUS: NO_FAULT\nUART OUTPUT: 'boot ok\\ntick ok\\ninit done\\n'\nEXPECTED LINES: ['boot ok', 'tick ok', 'init done']\nUART CHECK: all expected lines present\nCPU HALTED AT (end of run window): main + 50 in section .text main.c:34\nBACKTRACE:\n#0  main () at main.c:34\nSOURCE AROUND main.c:34:\n  30:   uart_puts(\"boot ok\\n\");\n  31:   heartbeat_timer_init();\n  32:   uart_puts(wait_heartbeat() ? \"tick ok\\n\" : \"tick timeout\\n\");\n  33:   uart_puts(\"init done\\n\");\n> 34:   for (;;);\n  35: }",
+      "t": 59.57
+    }
+  ]
+}
